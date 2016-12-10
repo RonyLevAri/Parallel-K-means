@@ -8,4 +8,4 @@ typedef struct Point
 	double y;
 } Point;
 
-extern Point* calcPoints(Circle *circles, long numCircles, double theta);
+extern Point* calcPoints(Circle *circles, long numCircles, double theta, double *r, double *a, double *b, int rank);

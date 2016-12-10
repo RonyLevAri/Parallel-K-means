@@ -5,10 +5,11 @@
 #include <math.h>
 #include <stdio.h>
 
+
 static void initiateClusters(Point *points, Cluster *clusters, long numPoints, long numClusters);
 static void resetClusters(Cluster *clusters, long numClusters);
 
-KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step)
+KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step, int rank)
 {
 	KmeansAns *ans = (KmeansAns *)malloc(sizeof(KmeansAns));
 	long clusterIndex;
@@ -23,7 +24,7 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 
 	while (changed && iter < maxIter) {
 
-		printf("Iter #%ld\n", iter);
+		//printf("#%d, Iter #%ld\n", rank, iter);
 
 		if (iter != 0) {
 			resetClusters(clusters, numClusters);
@@ -34,26 +35,26 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 
 		// calcDistances();
 		for (i = 0; i < numPoints; i++) {
-			printf("point #%ld: x = %lf y = %lf\n", i, points[i].x, points[i].y);
+			//printf("#%d point #%ld: x = %lf y = %lf\n", rank, i, points[i].x, points[i].y); fflush(stdout);
 			double d = 0, minD = -1;
 			for (j = 0; j < numClusters; j++) {
-				printf("cluster #%ld with center: x = %lf y = %lf\n", j, clusters[j].center.x, clusters[j].center.y);
+				//printf("#%d cluster #%ld with center: x = %lf y = %lf\n", rank, j, clusters[j].center.x, clusters[j].center.y); fflush(stdout);
 				d = fabs(sqrt(pow(points[i].x - clusters[j].center.x, 2) + pow(points[i].y - clusters[j].center.y, 2)));
-				printf("calculated distance from center %ld (%lf, %lf) = %lf calculated numD = %lf\n", j, clusters[j].center.x, clusters[j].center.y, d, minD);
+				//printf("#%d calculated distance from center %ld (%lf, %lf) = %lf calculated numD = %lf\n", rank, j, clusters[j].center.x, clusters[j].center.y, d, minD); fflush(stdout);
 				if (minD == -1 || d < minD) {
 					minD = d;
 					clusterIndex = j;
 				}
 			}
-			printf("Point #%ld is in center #%ld\n", i, clusterIndex);
+			//printf("#%d Point #%ld is in center #%ld\n", rank, i, clusterIndex); fflush(stdout);
 			//assign point to cluster
 			clusters[clusterIndex].clustPoints[clusters[clusterIndex].numClustPoints] = points[i];
 			clusters[clusterIndex].numClustPoints++;
-			printf("Cluster #%ld has %ld points\n", clusterIndex, clusters[clusterIndex].numClustPoints);
+			//printf("#%d Cluster #%ld has %ld points\n", rank, clusterIndex, clusters[clusterIndex].numClustPoints); fflush(stdout);
 			if ((generalMinDist == -1) || (minD < generalMinDist)) {
 				generalMinDist = minD;
 			}
-			printf("General min distance is %lf\n", generalMinDist);
+			//printf("#%d General min distance is %lf\n", rank, generalMinDist); fflush(stdout);
 		}
 
 		// calcCenters();
@@ -61,14 +62,14 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 		for (i = 0; i < numClusters; i++) {
 			newCenterX = 0;
 			newCenterY = 0;
-			printf("cluster #%ld with center: x = %lf y = %lf\n", i, clusters[i].center.x, clusters[i].center.y);
+			//printf("#%d cluster #%ld with center: x = %lf y = %lf\n", rank, i, clusters[i].center.x, clusters[i].center.y); fflush(stdout);
 			for (j = 0; j < clusters[i].numClustPoints; j++) {
 				newCenterX += clusters[i].clustPoints[j].x;
 				newCenterY += clusters[i].clustPoints[j].y;
 			}
 			newCenterX = newCenterX / clusters[i].numClustPoints;
 			newCenterY = newCenterY / clusters[i].numClustPoints;
-			printf("cluster #%ld new center: x = %lf y = %lf\n", i, newCenterX, newCenterY);
+			//printf("#%d cluster #%ld new center: x = %lf y = %lf\n", rank, i, newCenterX, newCenterY); fflush(stdout);
 			if ((clusters[i].center.x != newCenterX) && (clusters[i].center.y != newCenterY)) {
 				changed = true;
 				clusters[i].center.x = newCenterX;
@@ -81,7 +82,11 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 	(*ans).minDistance = generalMinDist;
 	(*ans).timeStep = step;
 	(*ans).centers = (Point*)malloc(numClusters * sizeof(Point));
+	(*ans).CentersX = (double*)malloc(numClusters * sizeof(double));
+	(*ans).CentersY = (double*)malloc(numClusters * sizeof(double));
 	for (i = 0; i < numClusters; i++) {
+		(*ans).CentersX[i] = clusters[i].center.x;
+		(*ans).CentersY[i] = clusters[i].center.y;
 		(*ans).centers[i] = clusters[i].center;
 	}
 

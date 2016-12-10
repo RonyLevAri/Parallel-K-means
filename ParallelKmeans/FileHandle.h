@@ -13,9 +13,12 @@ typedef struct Input
 {
 	long numCircles;
 	long clusters;
-	double timeStep;
+	double deltaT;
 	double interval;
 	long maxItr;
+	double *r;
+	double *a;
+	double *b;
 	Circle *circles;
 }Input;
 
