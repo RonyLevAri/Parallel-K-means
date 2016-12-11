@@ -86,13 +86,14 @@ int main(int argc, char *argv[])
 	if (world_rank == master) {
 		allocateJobRange(input, world_size, &startStep, &endStep, &numJobsToProc);
 	}
-	else { // add condition for procesess < jobs - so that no nodes will be waiting
-		MPI_Recv(&endStep, 1, MPI_DOUBLE, master, 0, MPI_COMM_WORLD, &status);
-		MPI_Recv(&startStep, 1, MPI_DOUBLE, master, 0, MPI_COMM_WORLD, &status);
-		MPI_Recv(&numJobsToProc, 1, MPI_LONG, master, 0, MPI_COMM_WORLD, &status);
+	else { 
+		MPI_Recv(&endStep, 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &status);
+		MPI_Recv(&startStep, 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &status);
+		MPI_Recv(&numJobsToProc, 1, MPI_LONG, master, tag, MPI_COMM_WORLD, &status);
 		printf("process #%d  will do %ld jobs from %lf to %lf\n", world_rank, numJobsToProc, startStep, endStep); fflush(stdout);
 	}
 
+	// do k-means calculations
 	if (numJobsToProc > 0) {
 		ans = (KmeansAns **)malloc(numJobsToProc * sizeof(KmeansAns*));
 		jobCounter = 0;
@@ -114,19 +115,17 @@ int main(int argc, char *argv[])
 			printf("#%d Centers (x = %lf , y = %lf)\n", world_rank, (*(ans[kmeansMindistIndex])).centers[i].x, (*(ans[kmeansMindistIndex])).centers[i].y); fflush(stdout);
 		}
 		printf("*************************************\n"); fflush(stdout);
-
-		//MPI_Datatype KmeansAnsType;
-		//BuildKmeansAnsType(&((*(ans[kmeansMindistIndex])).minDistance), &((*(ans[kmeansMindistIndex])).timeStep), (*(ans[kmeansMindistIndex])).CentersX, (*(ans[kmeansMindistIndex])).CentersY, (*input).clusters, &KmeansAnsType);
-
+		
+		// gather globalMinDist 
 		MPI_Allreduce(&((*(ans[kmeansMindistIndex])).minDistance), &globalMinDist, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 		
 		if (globalMinDist == ((*(ans[kmeansMindistIndex])).minDistance)) {
 
 			// if minimum found by none master process, send best "world image" to master
 			if (world_rank != master) {
-				MPI_Send(&((*(ans[kmeansMindistIndex])).timeStep), 1, MPI_DOUBLE, master, 0, MPI_COMM_WORLD);
-				MPI_Send(&((*(ans[kmeansMindistIndex])).CentersX), (*input).clusters, MPI_DOUBLE, master, 0, MPI_COMM_WORLD);
-				MPI_Send(&((*(ans[kmeansMindistIndex])).CentersY), (*input).clusters, MPI_DOUBLE, master, 0, MPI_COMM_WORLD);
+				MPI_Send(&((*(ans[kmeansMindistIndex])).timeStep), 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD);
+				MPI_Send(&((*(ans[kmeansMindistIndex])).CentersX), (*input).clusters, MPI_DOUBLE, master, tag, MPI_COMM_WORLD);
+				MPI_Send(&((*(ans[kmeansMindistIndex])).CentersY), (*input).clusters, MPI_DOUBLE, master, tag, MPI_COMM_WORLD);
 			}
 			else {
 				globalMinDistInMaster = 1;
@@ -136,9 +135,9 @@ int main(int argc, char *argv[])
 		if (world_rank == master) {
 			
 			if (globalMinDistInMaster == 0) {
-				MPI_Recv(&((*(ans[kmeansMindistIndex])).timeStep), 1, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
-				MPI_Recv(&((*(ans[kmeansMindistIndex])).CentersX), (*input).clusters, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
-				MPI_Recv(&((*(ans[kmeansMindistIndex])).CentersY), (*input).clusters, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+				MPI_Recv(&((*(ans[kmeansMindistIndex])).timeStep), 1, MPI_DOUBLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+				MPI_Recv(&((*(ans[kmeansMindistIndex])).CentersX), (*input).clusters, MPI_DOUBLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+				MPI_Recv(&((*(ans[kmeansMindistIndex])).CentersY), (*input).clusters, MPI_DOUBLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
 			}
 
 			printf("*************************************\n"); fflush(stdout);
@@ -150,9 +149,7 @@ int main(int argc, char *argv[])
 			finishTime = MPI_Wtime();
 			printf("total time : %lf\n  ", finishTime - startTime);
 		}
-
 	}
-
 	free(points);
 	free(ans);
 	free(input);
@@ -190,6 +187,10 @@ void allocateJobRange(Input *input, int world_size, double *startStep, double *e
 	(*endStep) = (*input).interval;
 	printf("master will do %ld jobs from %lf to %lf\n", (*numJobsToProc), (*startStep), (*endStep)); fflush(stdout);
 }
+
+//MPI_Datatype KmeansAnsType;
+//BuildKmeansAnsType(&((*(ans[kmeansMindistIndex])).minDistance), &((*(ans[kmeansMindistIndex])).timeStep), (*(ans[kmeansMindistIndex])).CentersX, (*(ans[kmeansMindistIndex])).CentersY, (*input).clusters, &KmeansAnsType);
+
 void BuildKmeansAnsType(double *minDist, double *timeStep, double *centerX, double *centerY, long numClusters, MPI_Datatype *mpiKmensAnsPtr) 
 {
 	
