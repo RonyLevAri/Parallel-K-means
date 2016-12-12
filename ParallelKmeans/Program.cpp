@@ -30,10 +30,10 @@ int main(int argc, char *argv[])
 	double theta; /*"world image" theta*/
 	Point *points = NULL; /*pionts, based on theta calculation*/
 	KmeansAns **ans = NULL; /*"world image" k-means answers array*/
-	long kmeansMindistIndex = 0; /*the minimal k-means distance of all calculated "world images"*/
+	long kmeansMinDistIndex = 0; /*the minimal k-means distance of all calculated "world images"*/
 	Input *input = NULL; /*data read from file*/
 	double globalMinDist; /*the minimum k-means distance calculated by all nodes*/
-	int globalMinDistInMaster = 0; // 0 = false, 1 = true
+	int isGlobalMinDistInMaster = 0; // 0 = false, 1 = true
 	
 	// Initialize the MPI environment
 	master = tag = 0;
@@ -55,10 +55,10 @@ int main(int argc, char *argv[])
 		return MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 
-	if (world_size < 2) {
-		printf("ERROR: number of processes must be of size 2 at least\n"); fflush(stdout);
-		return MPI_Abort(MPI_COMM_WORLD, 1);
-	}
+	//if (world_size < 2) {
+	//	printf("ERROR: number of processes must be of size 2 at least\n"); fflush(stdout);
+	//	return MPI_Abort(MPI_COMM_WORLD, 1);
+	//}
 
 	if (world_rank == master) {
 		startTime = MPI_Wtime();
@@ -68,17 +68,19 @@ int main(int argc, char *argv[])
 		input = (Input *)malloc(sizeof(Input*));
 	} // other processes should initialize the input struct
 
-	// bradcast common data to all processes
-	MPI_Bcast(&((*input).numCircles), 1, MPI_LONG, master, MPI_COMM_WORLD);
-	if (world_rank != master) {
-		(*input).r = (double *)malloc((*input).numCircles * sizeof(double));
-		(*input).a = (double *)malloc((*input).numCircles * sizeof(double));
-		(*input).b = (double *)malloc((*input).numCircles * sizeof(double));
+	if (world_size > 1) {
+		// bradcast common data to all processes
+		MPI_Bcast(&((*input).numCircles), 1, MPI_LONG, master, MPI_COMM_WORLD);
+		if (world_rank != master) {
+			(*input).r = (double *)malloc((*input).numCircles * sizeof(double));
+			(*input).a = (double *)malloc((*input).numCircles * sizeof(double));
+			(*input).b = (double *)malloc((*input).numCircles * sizeof(double));
+		}
+
+		buildMpiInputType(input, &mpiInput);
+		MPI_Bcast(input, 1, mpiInput, master, MPI_COMM_WORLD);
 	}
-
-	buildMpiInputType(input, &mpiInput);
-	MPI_Bcast(input, 1, mpiInput, master, MPI_COMM_WORLD);
-
+	
 	// allocate deltaT's jobs
 	if (world_rank == master) {
 		allocateJobRange(input, world_size, &startStep, &endStep, &numJobsToProc);
@@ -100,44 +102,47 @@ int main(int argc, char *argv[])
 			points = calcPoints((*input).numCircles, theta, (*input).r, (*input).a, (*input).b, world_rank);
 			ans[jobCounter] = runKmeans(points, (*input).numCircles, (*input).clusters, (*input).maxItr, startStep, world_rank);
 			startStep += (*input).deltaT;
-			if (jobCounter == 0 || (*(ans[jobCounter])).minDistance < (*(ans[kmeansMindistIndex])).minDistance) {
-				kmeansMindistIndex = jobCounter;
+			if (jobCounter == 0 || (*(ans[jobCounter])).minDistance < (*(ans[kmeansMinDistIndex])).minDistance) {
+				kmeansMinDistIndex = jobCounter;
 			}
 			jobCounter++;
 		} while (numJobsToProc > jobCounter);
 
 		printf("*************************************\n"); fflush(stdout);
-		printf("#%d General min dist is %lf, the time is %lf\n", world_rank, (*ans[kmeansMindistIndex]).minDistance, (*(ans[kmeansMindistIndex])).timeStep); fflush(stdout);
+		printf("#%d General min dist is %lf, the time is %lf\n", world_rank, (*ans[kmeansMinDistIndex]).minDistance, (*(ans[kmeansMinDistIndex])).timeStep); fflush(stdout);
 		for (int i = 0; i < (*input).clusters; i++) {
-			printf("Final Centers (x = %lf , y = %lf)\n", (*(ans[kmeansMindistIndex])).CentersX[i], (*(ans[kmeansMindistIndex])).CentersY[i]); fflush(stdout);
+			printf("Final Centers (x = %lf , y = %lf)\n", (*(ans[kmeansMinDistIndex])).CentersX[i], (*(ans[kmeansMinDistIndex])).CentersY[i]); fflush(stdout);
 		}
 		printf("*************************************\n"); fflush(stdout);
 		
 		// gather globalMinDist information 
-		MPI_Allreduce(&((*(ans[kmeansMindistIndex])).minDistance), &globalMinDist, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-
-		buildMpiKmeansAnsType(ans[kmeansMindistIndex], (*input).clusters, &mpiKmeansAns);
+		if (world_size > 1) {
+			MPI_Allreduce(&((*(ans[kmeansMinDistIndex])).minDistance), &globalMinDist, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+			buildMpiKmeansAnsType(ans[kmeansMinDistIndex], (*input).clusters, &mpiKmeansAns);
+		} 
+		else {
+			globalMinDist = ((*(ans[kmeansMinDistIndex])).minDistance);
+		}
 		
-		if (globalMinDist == ((*(ans[kmeansMindistIndex])).minDistance)) {
+		if (globalMinDist == ((*(ans[kmeansMinDistIndex])).minDistance)) {
 
 			// if minimum found by none master process, send best "world image" to master
 			if (world_rank != master) {
 				MPI_Request request1;
-				MPI_Isend(ans[kmeansMindistIndex], 1, mpiKmeansAns, master, tag, MPI_COMM_WORLD, &request1);
+				MPI_Isend(ans[kmeansMinDistIndex], 1, mpiKmeansAns, master, tag, MPI_COMM_WORLD, &request1);
 			}
 			else {
-				globalMinDistInMaster = 1;
+				isGlobalMinDistInMaster = 1;
 			}
 		}
 
 		if (world_rank == master) {
 
-			if (globalMinDistInMaster == 0) {
-				printf("master recieving\n");
-				MPI_Recv(ans[kmeansMindistIndex], 1, mpiKmeansAns, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+			if (isGlobalMinDistInMaster == 0) {
+				MPI_Recv(ans[kmeansMinDistIndex], 1, mpiKmeansAns, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
 			}
 
-			WriteToFile(OUTPUT_ROUTE, ans[kmeansMindistIndex], (*input).clusters);
+			WriteToFile(OUTPUT_ROUTE, ans[kmeansMinDistIndex], (*input).clusters);
 			finishTime = MPI_Wtime();
 			printf("total time : %lf\n  ", finishTime - startTime);
 		}

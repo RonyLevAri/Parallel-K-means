@@ -56,7 +56,7 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 			}
 			//printf("#%d General min distance is %lf\n", rank, generalMinDist); fflush(stdout);
 		}
-
+		// OpenMP barrier here
 		// calcCenters();
 		changed = false;
 		for (i = 0; i < numClusters; i++) {

@@ -1,5 +1,5 @@
 The Global minimum distance was found to be 0.082544 at time step 0.600000.
- The Centers found:
+The Centers found:
 #0: (x = -5.091286, y = -4.238801)
 #1: (x = -0.366838, y = 5.589774)
 #2: (x = -0.260384, y = -3.430022)
