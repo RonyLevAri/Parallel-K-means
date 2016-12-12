@@ -8,6 +8,8 @@
 #include <mpi.h>
 
 #define PI 3.14159265358979323846
+#define INPUT_ROUTE "C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\\ParallelKmeans\\points.txt"
+#define OUTPUT_ROUTE "C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\\ParallelKmeans\\answer.txt"
 
 static void allocateJobRange(Input *input, int world_size, double *startStep, double *endStep, long *numJobsToProc);
 static void buildMpiKmeansAnsType(KmeansAns *ans, long numClusters, MPI_Datatype *mpiKmensAnsPtr);
@@ -60,7 +62,7 @@ int main(int argc, char *argv[])
 
 	if (world_rank == master) {
 		startTime = MPI_Wtime();
-		input = readFile("C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\\ParallelKmeans\\points.txt"); fflush(stdout);
+		input = readFile(INPUT_ROUTE); fflush(stdout);
 	} // only master reads data from file
 	else {
 		input = (Input *)malloc(sizeof(Input*));
@@ -95,7 +97,7 @@ int main(int argc, char *argv[])
 		do {
 			//printf("#%d in step: %lf\n", world_rank, startStep); fflush(stdout);
 			theta = (2 * PI * startStep / (*input).interval);
-			points = calcPoints((*input).circles, (*input).numCircles, theta, (*input).r, (*input).a, (*input).b, world_rank);
+			points = calcPoints((*input).numCircles, theta, (*input).r, (*input).a, (*input).b, world_rank);
 			ans[jobCounter] = runKmeans(points, (*input).numCircles, (*input).clusters, (*input).maxItr, startStep, world_rank);
 			startStep += (*input).deltaT;
 			if (jobCounter == 0 || (*(ans[jobCounter])).minDistance < (*(ans[kmeansMindistIndex])).minDistance) {
@@ -106,8 +108,8 @@ int main(int argc, char *argv[])
 
 		printf("*************************************\n"); fflush(stdout);
 		printf("#%d General min dist is %lf, the time is %lf\n", world_rank, (*ans[kmeansMindistIndex]).minDistance, (*(ans[kmeansMindistIndex])).timeStep); fflush(stdout);
-		for (int i = 0; i < 3; i++) {
-			printf("#%d Centers (x = %lf , y = %lf)\n", world_rank, (*(ans[kmeansMindistIndex])).centers[i].x, (*(ans[kmeansMindistIndex])).centers[i].y); fflush(stdout);
+		for (int i = 0; i < (*input).clusters; i++) {
+			printf("Final Centers (x = %lf , y = %lf)\n", (*(ans[kmeansMindistIndex])).CentersX[i], (*(ans[kmeansMindistIndex])).CentersY[i]); fflush(stdout);
 		}
 		printf("*************************************\n"); fflush(stdout);
 		
@@ -120,7 +122,7 @@ int main(int argc, char *argv[])
 
 			// if minimum found by none master process, send best "world image" to master
 			if (world_rank != master) {
-				MPI_Request request1, request2, request3;
+				MPI_Request request1;
 				MPI_Isend(ans[kmeansMindistIndex], 1, mpiKmeansAns, master, tag, MPI_COMM_WORLD, &request1);
 			}
 			else {
@@ -135,12 +137,7 @@ int main(int argc, char *argv[])
 				MPI_Recv(ans[kmeansMindistIndex], 1, mpiKmeansAns, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
 			}
 
-			printf("*************************************\n"); fflush(stdout);
-			printf("Final min dist is %lf, the time is %lf\n", globalMinDist, (*(ans[kmeansMindistIndex])).timeStep); fflush(stdout);
-			for (int i = 0; i < (*input).clusters; i++) {
-				printf("Final Centers (x = %lf , y = %lf)\n", (*(ans[kmeansMindistIndex])).CentersX[i], (*(ans[kmeansMindistIndex])).CentersY[i]); fflush(stdout);
-			}
-			printf("*************************************\n"); fflush(stdout);
+			WriteToFile(OUTPUT_ROUTE, ans[kmeansMindistIndex], (*input).clusters);
 			finishTime = MPI_Wtime();
 			printf("total time : %lf\n  ", finishTime - startTime);
 		}

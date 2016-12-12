@@ -1,13 +1,7 @@
 #pragma once
-#define readFile FileHandlereadFile
-
-typedef struct Circle
-{
-	long index;
-	double radius;
-	double a;
-	double b;
-} Circle;
+#define readFile FileHandleReadFile
+#define WriteToFile FileHandleWriteToFile
+#include "Kmeans.h"
 
 typedef struct Input
 {
@@ -19,10 +13,11 @@ typedef struct Input
 	double *r;
 	double *a;
 	double *b;
-	Circle *circles;
 }Input;
 
 extern Input* readFile(char rout[]);
+
+extern void WriteToFile(char rout[], KmeansAns *ans, long numClusters);
 
 
 

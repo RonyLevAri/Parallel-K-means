@@ -81,13 +81,11 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 	// Kmeans Answer
 	(*ans).minDistance = generalMinDist;
 	(*ans).timeStep = step;
-	(*ans).centers = (Point*)malloc(numClusters * sizeof(Point));
 	(*ans).CentersX = (double*)malloc(numClusters * sizeof(double));
 	(*ans).CentersY = (double*)malloc(numClusters * sizeof(double));
 	for (i = 0; i < numClusters; i++) {
 		(*ans).CentersX[i] = clusters[i].center.x;
 		(*ans).CentersY[i] = clusters[i].center.y;
-		(*ans).centers[i] = clusters[i].center;
 	}
 
 	return ans;

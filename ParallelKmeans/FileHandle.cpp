@@ -1,5 +1,6 @@
 #define _CRT_SECURE_NO_DEPRECATE
 #include "FileHandle.h"
+#include "Kmeans.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -47,29 +48,45 @@ static void readHeaderLine(FILE *fp, struct Input *input)
 static void readCircles(FILE *fp, struct Input *input)
 {
 	int n; /*number of items scaned by fscanf*/
-	Circle *circles = NULL; /*The array of circles read from file*/
 	int i;
+	long tmp;
 
-	circles = (Circle *)malloc((*input).numCircles * sizeof(Circle));
 	(*input).r = (double *)malloc((*input).numCircles * sizeof(double));
 	(*input).a = (double *)malloc((*input).numCircles * sizeof(double));
 	(*input).b = (double *)malloc((*input).numCircles * sizeof(double));
 
 	for (i = 0; i < (*input).numCircles; i++) {
 
-		if ((n = fscanf(fp, "%ld %lf %lf %lf", &(circles[i].index), &(circles[i].a), &(circles[i].b), &(circles[i].radius))) != CIRCLE_INFO) {
+		if ((n = fscanf(fp, "%ld %lf %lf %lf", &tmp, &((*input).a[i]), &((*input).b[i]), &((*input).r[i])) != CIRCLE_INFO)) {
 			printf("Could not read circle - file text error.\n"); fflush(stdout);
 			exit(EXIT_FAILURE);
 		}
-		(*input).r[i] = circles[i].radius;
-		(*input).a[i] = circles[i].a;
-		(*input).b[i] = circles[i].b;
 		printf("Reading %lf, %lf, %lf\n", (*input).r[i], (*input).a[i], (*input).b[i]); fflush(stdout);
 	}
-
-	(*input).circles = circles;
 }
 
+void WriteToFile(char rout[], KmeansAns *ans, long numClusters)
+{
+
+	FILE *fp = NULL;
+
+	printf("Writing file\n"); fflush(stdout);
+
+	if ((fp = fopen(rout, "w")) == NULL) {
+
+		printf("Cannot open file.\n"); fflush(stdout);
+		exit(EXIT_FAILURE);
+
+	}
+
+	fprintf(fp, "The Global minimum distance was found to be %lf at time step %lf.\nThe Centers found:\n", (*ans).minDistance, (*ans).timeStep);
+
+	for (int i = 0; i < numClusters; i++) {
+		fprintf(fp, "#%d: (x = %lf, y = %lf)\n", i, (*ans).CentersX[i], (*ans).CentersY[i]);
+	}
+	
+	fclose(fp);
+}
 
 
 

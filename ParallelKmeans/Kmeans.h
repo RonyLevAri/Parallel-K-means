@@ -16,7 +16,6 @@ typedef struct KmeansAns
 	double timeStep;
 	double *CentersX;
 	double *CentersY;
-	Point *centers;
 }KmeansAns;
 
 extern KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step, int rank);

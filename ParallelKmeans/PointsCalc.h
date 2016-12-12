@@ -1,6 +1,5 @@
 #pragma once
 #define calcPoints PointsCalcFunc
-#include "FileHandle.h"
 
 typedef struct Point
 {
@@ -8,4 +7,4 @@ typedef struct Point
 	double y;
 } Point;
 
-extern Point* calcPoints(Circle *circles, long numCircles, double theta, double *r, double *a, double *b, int rank);
+extern Point* calcPoints(long numCircles, double theta, double *r, double *a, double *b, int rank);
