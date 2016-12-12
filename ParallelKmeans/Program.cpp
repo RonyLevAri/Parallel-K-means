@@ -132,10 +132,6 @@ int main(int argc, char *argv[])
 			if (world_rank != master) {
 				MPI_Request request1, request2, request3;
 				MPI_Isend(ans[kmeansMindistIndex], 1, mpiKmeansAns, master, tag, MPI_COMM_WORLD, &request1);
-
-				//MPI_Isend(&((*(ans[kmeansMindistIndex])).timeStep), 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &request1);
-				//MPI_Isend(&((*(ans[kmeansMindistIndex])).CentersX[0]), (*input).clusters, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &request2);
-				//MPI_Isend(&((*(ans[kmeansMindistIndex])).CentersY[0]), (*input).clusters, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &request3);
 			}
 			else {
 				globalMinDistInMaster = 1;
@@ -148,10 +144,6 @@ int main(int argc, char *argv[])
 			if (globalMinDistInMaster == 0) {
 				printf("master recieving\n");
 				MPI_Recv(ans[kmeansMindistIndex], 1, mpiKmeansAns, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
-
-				//MPI_Recv(&((*(ans[kmeansMindistIndex])).timeStep), 1, MPI_DOUBLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
-				//MPI_Recv(&((*(ans[kmeansMindistIndex])).CentersX[0]), (*input).clusters, MPI_DOUBLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
-				//MPI_Recv(&((*(ans[kmeansMindistIndex])).CentersY[0]), (*input).clusters, MPI_DOUBLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
 			}
 
 			printf("*************************************\n"); fflush(stdout);
