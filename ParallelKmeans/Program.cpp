@@ -41,14 +41,12 @@ int main(int argc, char *argv[])
 		return MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 
-	// Get the number of processes
 	ierr = MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	if (ierr != MPI_SUCCESS) {
 		printf("ERROR: colud not initialize MPI_Comm_size\n"); fflush(stdout);
 		return MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 
-	// Get the rank of the process
 	ierr = MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	if (ierr != MPI_SUCCESS) {
 		printf("ERROR: colud not initialize MPI_Comm_rank\n"); fflush(stdout);
@@ -78,14 +76,6 @@ int main(int argc, char *argv[])
 
 	buildMpiInputType(input, &mpiInput);
 	MPI_Bcast(input, 1, mpiInput, master, MPI_COMM_WORLD);
-
-	//MPI_Bcast(&((*input).deltaT), 1, MPI_DOUBLE, master, MPI_COMM_WORLD);
-	//MPI_Bcast(&((*input).clusters), 1, MPI_LONG, master, MPI_COMM_WORLD);
-	//MPI_Bcast(&((*input).maxItr), 1, MPI_LONG, master, MPI_COMM_WORLD);
-	//MPI_Bcast(&((*input).interval), 1, MPI_DOUBLE, master, MPI_COMM_WORLD);
-	//MPI_Bcast(&((*input).r[0]), (*input).numCircles, MPI_DOUBLE, master, MPI_COMM_WORLD);
-	//MPI_Bcast(&((*input).a[0]), (*input).numCircles, MPI_DOUBLE, master, MPI_COMM_WORLD);
-	//MPI_Bcast(&((*input).b[0]), (*input).numCircles, MPI_DOUBLE, master, MPI_COMM_WORLD);
 
 	// allocate deltaT's jobs
 	if (world_rank == master) {
@@ -121,7 +111,7 @@ int main(int argc, char *argv[])
 		}
 		printf("*************************************\n"); fflush(stdout);
 		
-		// gather globalMinDist 
+		// gather globalMinDist information 
 		MPI_Allreduce(&((*(ans[kmeansMindistIndex])).minDistance), &globalMinDist, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 
 		buildMpiKmeansAnsType(ans[kmeansMindistIndex], (*input).clusters, &mpiKmeansAns);
@@ -138,7 +128,6 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		
 		if (world_rank == master) {
 
 			if (globalMinDistInMaster == 0) {
