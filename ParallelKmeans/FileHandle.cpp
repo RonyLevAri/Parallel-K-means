@@ -14,7 +14,7 @@ Input* readFile(char rout[])
 	FILE *fp = NULL; 
 	struct Input *input = NULL;
 
-	printf("Reading file"); fflush(stdout);
+	printf("Reading file\n"); fflush(stdout);
 	
 	if ((fp = fopen(rout, "r")) == NULL) {
 		
