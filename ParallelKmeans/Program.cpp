@@ -4,16 +4,23 @@
 #include "Kmeans.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include "omp.h"
+#ifdef _OPENMP
+	#include "omp.h"
+#else
+	#define omp_get_thread_num() 0
+#endif
 #include <mpi.h>
 
 #define PI 3.14159265358979323846
-#define INPUT_ROUTE "C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\\ParallelKmeans\\points.txt"
-#define OUTPUT_ROUTE "C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\\ParallelKmeans\\answer.txt"
+#define INPUT_ROUTE "C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\ParallelKmeans\\input_14.txt"
+#define OUTPUT_ROUTE "C:\\Users\\ronylevari\\Documents\\Visual Studio 2015\\Projects\\ParallelKmeans\\answer_14.txt"
+//#define INPUT_ROUTE "C:\\Users\\afeka.ACADEMIC\\Desktop\\ParallelKmeans\\kmean.txt"
+//#define OUTPUT_ROUTE "C:\\Users\\afeka.ACADEMIC\\Desktop\\ParallelKmeans\\kmean.txt"
 
 static void allocateJobRange(Input *input, int world_size, double *startStep, double *endStep, long *numJobsToProc);
 static void buildMpiKmeansAnsType(KmeansAns *ans, long numClusters, MPI_Datatype *mpiKmensAnsPtr);
 static void buildMpiInputType(Input *input, MPI_Datatype *mpiKmensInputPtr);
+static long findMinDistIndex(KmeansAns **ans, long arrSize);
 
 int main(int argc, char *argv[])
 {
@@ -57,21 +64,22 @@ int main(int argc, char *argv[])
 
 	if (world_rank == master) {
 		startTime = MPI_Wtime();
-		input = readFile(INPUT_ROUTE); fflush(stdout);
+		input = readFile(INPUT_ROUTE); 
 	} // only master reads data from file
 	else {
 		input = (Input *)malloc(sizeof(Input*));
-	} // other processes should initialize the input struct
+	} // other processes initialize the input struct
 
 	if (world_size > 1) {
 		// bradcast common data to all processes only if there are more than 1 node
 		MPI_Bcast(&((*input).numCircles), 1, MPI_LONG, master, MPI_COMM_WORLD);
+		// all processes that are not the master should initialize their input circle data arrays before recieving them 
 		if (world_rank != master) {
 			(*input).r = (double *)malloc((*input).numCircles * sizeof(double));
 			(*input).a = (double *)malloc((*input).numCircles * sizeof(double));
 			(*input).b = (double *)malloc((*input).numCircles * sizeof(double));
 		}
-
+		// processes build derived datatype for more efficient process communication 
 		buildMpiInputType(input, &mpiInput);
 		MPI_Bcast(input, 1, mpiInput, master, MPI_COMM_WORLD);
 	}
@@ -81,27 +89,35 @@ int main(int argc, char *argv[])
 		allocateJobRange(input, world_size, &startStep, &endStep, &numJobsToProc);
 	}
 	else { 
-		MPI_Recv(&endStep, 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &status);
+		//MPI_Recv(&endStep, 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &status);
 		MPI_Recv(&startStep, 1, MPI_DOUBLE, master, tag, MPI_COMM_WORLD, &status);
 		MPI_Recv(&numJobsToProc, 1, MPI_LONG, master, tag, MPI_COMM_WORLD, &status);
 		printf("process #%d  will do %ld jobs from %lf to %lf\n", world_rank, numJobsToProc, startStep, endStep); fflush(stdout);
 	}
 
-	// do k-means calculations
+	// all nodes that were given jobs, participate in k-means calculations and communication
 	if (numJobsToProc > 0) {
+		
 		ans = (KmeansAns **)malloc(numJobsToProc * sizeof(KmeansAns*));
-		jobCounter = 0;
-		do {
-			theta = (2 * PI * startStep / (*input).interval);
-			// may make points stack var
-			points = calcPoints((*input).numCircles, theta, (*input).r, (*input).a, (*input).b, world_rank);
-			ans[jobCounter] = runKmeans(points, (*input).numCircles, (*input).clusters, (*input).maxItr, startStep, world_rank);
-			startStep += (*input).deltaT;
-			if (jobCounter == 0 || (*(ans[jobCounter])).minDistance < (*(ans[kmeansMinDistIndex])).minDistance) {
-				kmeansMinDistIndex = jobCounter;
+
+		// procersses k-means loop can, after modification, be distributed among thrads using OpenMP
+		
+		theta = 0;
+
+		#pragma omp parallel default(none) shared(ans, numJobsToProc, startStep, world_rank, input) private(jobCounter, theta, points) 
+		{
+			#pragma omp for 
+			for (jobCounter = 0; jobCounter < numJobsToProc; jobCounter++) {
+				theta = (2 * PI * (startStep + (jobCounter * (*input).deltaT)) / (*input).interval);
+				points = calcPoints((*input).numCircles, theta, (*input).r, (*input).a, (*input).b);
+				ans[jobCounter] = runKmeans(points, (*input).numCircles, (*input).clusters, (*input).maxItr, (startStep + (jobCounter * (*input).deltaT)));
 			}
-			jobCounter++;
-		} while (numJobsToProc > jobCounter);
+		} /*end of parallel construct - barrier*/
+
+		//findMinDistIndex() was initilly processed during the k-means loop but had to be taken outside in order to parallel the loop (prevent loop iteration dependency) 
+		kmeansMinDistIndex = findMinDistIndex(ans, numJobsToProc);
+
+		MPI_Barrier(MPI_COMM_WORLD);
 
 		printf("*************************************\n"); fflush(stdout);
 		printf("#%d General min dist is %lf, the time is %lf\n", world_rank, (*ans[kmeansMinDistIndex]).minDistance, (*(ans[kmeansMinDistIndex])).timeStep); fflush(stdout);
@@ -110,37 +126,44 @@ int main(int argc, char *argv[])
 		}
 		printf("*************************************\n"); fflush(stdout);
 		
-		// gather globalMinDist information (logic will work also with a single node)
+		// gather globalMinDist information (logic will work also with a single process)
 		if (world_size > 1) {
 			MPI_Allreduce(&((*(ans[kmeansMinDistIndex])).minDistance), &globalMinDist, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 			buildMpiKmeansAnsType(ans[kmeansMinDistIndex], (*input).clusters, &mpiKmeansAns);
-		} 
+		} // activate Allreduce and build derived datatype only if more than one process is invovled
 		else {
 			globalMinDist = ((*(ans[kmeansMinDistIndex])).minDistance);
-		}
+		} // if only one process invovled, set the global min distance to the distance found by the single process
 		
 		if (globalMinDist == ((*(ans[kmeansMinDistIndex])).minDistance)) {
 
 			// if minimum found by none master process, send best "world image" to master
 			if (world_rank != master) {
 				MPI_Request request1;
+				// use MPI_Isend in case more than one process have the nim distance, so they won't block 
 				MPI_Isend(ans[kmeansMinDistIndex], 1, mpiKmeansAns, master, tag, MPI_COMM_WORLD, &request1);
-			}
+			} // END OF SLAVE THREADS WORK
 			else {
 				isGlobalMinDistInMaster = 1;
 			}
 		}
+	}
 
-		if (world_rank == master) {
+	// master should colect the min distance data for final result
+	if (world_rank == master) {
 
-			if (isGlobalMinDistInMaster == 0) {
-				MPI_Recv(ans[kmeansMinDistIndex], 1, mpiKmeansAns, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
-			}
-			printf("min dist found %lf\n", (*ans[kmeansMinDistIndex]).minDistance);
-			WriteToFile(OUTPUT_ROUTE, ans[kmeansMinDistIndex], (*input).clusters);
-			finishTime = MPI_Wtime();
-			printf("total time : %lf\n  ", finishTime - startTime);
+		if (isGlobalMinDistInMaster == 0) {
+			MPI_Recv(ans[kmeansMinDistIndex], 1, mpiKmeansAns, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
 		}
+		printf("*************************************\n"); fflush(stdout);
+		printf("#%d General min dist is %lf, the time is %lf\n", world_rank, (*ans[kmeansMinDistIndex]).minDistance, (*(ans[kmeansMinDistIndex])).timeStep); fflush(stdout);
+		for (int i = 0; i < (*input).clusters; i++) {
+			printf("Final Centers (x = %lf , y = %lf)\n", (*(ans[kmeansMinDistIndex])).CentersX[i], (*(ans[kmeansMinDistIndex])).CentersY[i]); fflush(stdout);
+		}
+		printf("*************************************\n"); fflush(stdout);
+		WriteToFile(OUTPUT_ROUTE, ans[kmeansMinDistIndex], (*input).clusters);
+		finishTime = MPI_Wtime();
+		printf("total time : %lf\n", finishTime - startTime);
 	}
 
 	free(points);
@@ -150,6 +173,17 @@ int main(int argc, char *argv[])
 	printf("process #%d bye bye\n", world_rank);
 	// Finalize the MPI environment.
 	ierr = MPI_Finalize();
+}
+
+static long findMinDistIndex(KmeansAns **ans, long arrSize)
+{
+	long minDistIndex = 0;
+	for (int k = 1; k < arrSize; k++) {
+		if ((*(ans[k])).minDistance < (*(ans[minDistIndex])).minDistance) {
+			minDistIndex = k;
+		}
+	}
+	return minDistIndex;
 }
 
 static void allocateJobRange(Input *input, int world_size, double *startStep, double *endStep, long *numJobsToProc)
@@ -172,7 +206,7 @@ static void allocateJobRange(Input *input, int world_size, double *startStep, do
 
 		(*endStep) = (*startStep) + ((*numJobsToProc) * (*input).deltaT - (*input).deltaT);
 		printf("process #%d is going to do %ld jobs from %lf to %lf\n", i, (*numJobsToProc), (*startStep), (*endStep)); fflush(stdout);
-		MPI_Send(&(*endStep), 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+		//MPI_Send(&(*endStep), 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
 		MPI_Send(&(*startStep), 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
 		MPI_Send(&(*numJobsToProc), 1, MPI_LONG, i, 0, MPI_COMM_WORLD);
 		(*startStep) = (*endStep) + (*input).deltaT;

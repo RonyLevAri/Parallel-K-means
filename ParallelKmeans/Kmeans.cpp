@@ -5,11 +5,10 @@
 #include <math.h>
 #include <stdio.h>
 
-
 static void initiateClusters(Point *points, Cluster *clusters, long numPoints, long numClusters);
 static void resetClusters(Cluster *clusters, long numClusters);
 
-KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step, int rank)
+KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step)
 {
 	KmeansAns *ans = (KmeansAns *)malloc(sizeof(KmeansAns));
 	long clusterIndex;
@@ -24,60 +23,64 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 
 	while (changed && iter < maxIter) {
 
-		//printf("#%d, Iter #%ld\n", rank, iter);
-
 		if (iter != 0) {
 			resetClusters(clusters, numClusters);
 		}
 
-
-		generalMinDist = -1;
-
 		// calcDistances();
 		for (i = 0; i < numPoints; i++) {
-			//printf("#%d point #%ld: x = %lf y = %lf\n", rank, i, points[i].x, points[i].y); fflush(stdout);
 			double d = 0, minD = -1;
 			for (j = 0; j < numClusters; j++) {
-				//printf("#%d cluster #%ld with center: x = %lf y = %lf\n", rank, j, clusters[j].center.x, clusters[j].center.y); fflush(stdout);
 				d = fabs(sqrt(pow(points[i].x - clusters[j].center.x, 2) + pow(points[i].y - clusters[j].center.y, 2)));
-				//printf("#%d calculated distance from center %ld (%lf, %lf) = %lf calculated numD = %lf\n", rank, j, clusters[j].center.x, clusters[j].center.y, d, minD); fflush(stdout);
 				if (minD == -1 || d < minD) {
 					minD = d;
 					clusterIndex = j;
 				}
 			}
-			//printf("#%d Point #%ld is in center #%ld\n", rank, i, clusterIndex); fflush(stdout);
 			//assign point to cluster
 			clusters[clusterIndex].clustPoints[clusters[clusterIndex].numClustPoints] = points[i];
 			clusters[clusterIndex].numClustPoints++;
-			//printf("#%d Cluster #%ld has %ld points\n", rank, clusterIndex, clusters[clusterIndex].numClustPoints); fflush(stdout);
-			if ((generalMinDist == -1) || (minD < generalMinDist)) {
-				generalMinDist = minD;
-			}
-			//printf("#%d General min distance is %lf\n", rank, generalMinDist); fflush(stdout);
 		}
-		// OpenMP barrier here
+
 		// calcCenters();
 		changed = false;
-		for (i = 0; i < numClusters; i++) {
-			newCenterX = 0;
-			newCenterY = 0;
-			//printf("#%d cluster #%ld with center: x = %lf y = %lf\n", rank, i, clusters[i].center.x, clusters[i].center.y); fflush(stdout);
-			for (j = 0; j < clusters[i].numClustPoints; j++) {
-				newCenterX += clusters[i].clustPoints[j].x;
-				newCenterY += clusters[i].clustPoints[j].y;
+		
+		#pragma omp parallel default(none) shared(clusters, changed, numClusters) private(i, j, newCenterX, newCenterY) 
+		{
+			bool isChanged = false;
+			#pragma omp for 
+			for (i = 0; i < numClusters; i++) {
+				newCenterX = 0;
+				newCenterY = 0;
+				for (j = 0; j < clusters[i].numClustPoints; j++) {
+					newCenterX += clusters[i].clustPoints[j].x;
+					newCenterY += clusters[i].clustPoints[j].y;
+				}
+				newCenterX = newCenterX / clusters[i].numClustPoints;
+				newCenterY = newCenterY / clusters[i].numClustPoints;
+				if ((clusters[i].center.x != newCenterX) && (clusters[i].center.y != newCenterY)) {
+					clusters[i].center.x = newCenterX;
+					clusters[i].center.y = newCenterY;
+					isChanged = true;
+				}
 			}
-			newCenterX = newCenterX / clusters[i].numClustPoints;
-			newCenterY = newCenterY / clusters[i].numClustPoints;
-			//printf("#%d cluster #%ld new center: x = %lf y = %lf\n", rank, i, newCenterX, newCenterY); fflush(stdout);
-			if ((clusters[i].center.x != newCenterX) && (clusters[i].center.y != newCenterY)) {
-				changed = true;
-				clusters[i].center.x = newCenterX;
-				clusters[i].center.y = newCenterY;
-			}
+			// no need for critical section since changed is either updated to true or not
+			if(isChanged) changed = true;
 		}
 		iter++;
 	}
+	// checkClusterMinDist() - cannot parallel with openmp since update of shard var is done in inner loor - a synch will make it sequential and add openmp overhead
+	generalMinDist = -1;
+	for (i = 0; i < numClusters; i++) {
+		double d;
+		for (j = i + 1; j < numClusters; j++) {
+			d = fabs(sqrt(pow(clusters[i].center.x - clusters[j].center.x, 2) + pow(clusters[i].center.y - clusters[j].center.y, 2)));
+			if (generalMinDist == -1 || d < generalMinDist) {
+				generalMinDist = d;
+			}
+		}
+	}
+
 	// Kmeans Answer
 	(*ans).minDistance = generalMinDist;
 	(*ans).timeStep = step;

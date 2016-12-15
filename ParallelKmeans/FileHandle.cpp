@@ -15,7 +15,7 @@ Input* readFile(char rout[])
 	FILE *fp = NULL; 
 	struct Input *input = NULL;
 
-	printf("Reading file\n"); fflush(stdout);
+	//printf("Reading file\n"); fflush(stdout);
 	
 	if ((fp = fopen(rout, "r")) == NULL) {
 		
@@ -61,7 +61,6 @@ static void readCircles(FILE *fp, struct Input *input)
 			printf("Could not read circle - file text error.\n"); fflush(stdout);
 			exit(EXIT_FAILURE);
 		}
-		printf("Reading %lf, %lf, %lf\n", (*input).r[i], (*input).a[i], (*input).b[i]); fflush(stdout);
 	}
 }
 
@@ -69,8 +68,6 @@ void WriteToFile(char rout[], KmeansAns *ans, long numClusters)
 {
 
 	FILE *fp = NULL;
-
-	printf("Writing file\n"); fflush(stdout);
 
 	if ((fp = fopen(rout, "w")) == NULL) {
 

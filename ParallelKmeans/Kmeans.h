@@ -18,4 +18,4 @@ typedef struct KmeansAns
 	double *CentersY;
 }KmeansAns;
 
-extern KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step, int rank);
+extern KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIter, double step);
