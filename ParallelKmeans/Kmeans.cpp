@@ -17,6 +17,7 @@ KmeansAns* runKmeans(Point *points, long numPoints, long numClusters, long maxIt
 	bool changed = true;
 	double generalMinDist = -1;
 	long iter = 0;
+
 	Cluster *clusters = (Cluster *)malloc(numClusters * sizeof(Cluster));
 
 	initiateClusters(points, clusters, numPoints, numClusters);
